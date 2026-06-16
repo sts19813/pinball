@@ -94,6 +94,8 @@ class PinballScene extends Phaser.Scene {
     this.segments = [];
     this.bumpers = [];
     this.sensors = [];
+    this.movers = [];
+    this.launchCurve = [];
     this.targetsLit = new Set();
     this.rolloversLit = new Set();
 
@@ -103,6 +105,7 @@ class PinballScene extends Phaser.Scene {
     this.createBumpers();
     this.createRollovers();
     this.createTargets();
+    this.createMovingDetails();
     this.createFlippers();
     this.createPlunger();
     this.createBall();
@@ -145,12 +148,21 @@ class PinballScene extends Phaser.Scene {
   }
 
   drawBackplate() {
-    this.cameras.main.setBackgroundColor('#f7f7f9');
+    this.cameras.main.setBackgroundColor('#050712');
     const bg = this.add.graphics();
-    bg.fillGradientStyle(0xffffff, 0xffffff, 0xf0f2f6, 0xf0f2f6, 1);
+    bg.fillGradientStyle(0x050712, 0x091225, 0x1b0d2e, 0x050712, 1);
     bg.fillRect(0, 0, WIDTH, HEIGHT);
 
-    bg.fillStyle(0x000000, 0.18);
+    bg.fillStyle(0x7c5cff, 0.08);
+    bg.fillEllipse(270, 340, 480, 900);
+    bg.fillStyle(0x00d4ff, 0.07);
+    bg.fillEllipse(675, 470, 360, 720);
+    for (let i = 0; i < 90; i += 1) {
+      bg.fillStyle(0xffffff, Phaser.Math.FloatBetween(0.12, 0.38));
+      bg.fillCircle(Phaser.Math.Between(28, WIDTH - 28), Phaser.Math.Between(20, HEIGHT - 20), Phaser.Math.FloatBetween(0.6, 1.8));
+    }
+
+    bg.fillStyle(0x000000, 0.36);
     bg.fillRoundedRect(TABLE.left + 22, TABLE.top + 18, 644, 902, 10);
     bg.fillStyle(0x24282f, 1);
     bg.fillRoundedRect(TABLE.left - 22, TABLE.top - 18, 648, 920, 8);
@@ -178,8 +190,22 @@ class PinballScene extends Phaser.Scene {
 
     this.drawLane(243, 176, 306, 254, 0x7565d5);
     this.drawLane(657, 176, 594, 254, 0x7565d5);
-    this.drawLane(198, 562, 267, 642, 0x2b254e);
-    this.drawLane(702, 562, 633, 642, 0x2b254e);
+    this.drawLane(206, 562, 312, 704, 0x2b254e);
+    this.drawLane(694, 562, 588, 704, 0x2b254e);
+
+    const v = this.add.graphics();
+    v.lineStyle(12, 0x68e6e8, 0.35);
+    v.beginPath();
+    v.moveTo(318, 690);
+    v.lineTo(450, 806);
+    v.lineTo(582, 690);
+    v.strokePath();
+    v.lineStyle(4, 0xfff0a3, 0.85);
+    v.beginPath();
+    v.moveTo(318, 690);
+    v.lineTo(450, 806);
+    v.lineTo(582, 690);
+    v.strokePath();
 
     this.add.text(450, 560, 'PINBALL', {
       fontFamily: 'Arial Black, Impact, sans-serif',
@@ -225,19 +251,18 @@ class PinballScene extends Phaser.Scene {
     this.addRail(750, 138, 750, 902, 0.82, 12);
     this.addRail(150, 904, 282, 842, 0.72, 14);
     this.addRail(750, 904, 618, 842, 0.72, 14);
-    this.addRail(214, 792, 322, 722, 0.9, 16, 'slingLeft');
-    this.addRail(686, 792, 578, 722, 0.9, 16, 'slingRight');
-    this.addRail(196, 672, 310, 750, 0.9, 14);
-    this.addRail(704, 672, 590, 750, 0.9, 14);
-    this.addRail(265, 775, 342, 822, 0.76, 10);
-    this.addRail(635, 775, 558, 822, 0.76, 10);
+    this.addRail(214, 790, 334, 704, 0.95, 16, 'slingLeft');
+    this.addRail(686, 790, 566, 704, 0.95, 16, 'slingRight');
+    this.addRail(306, 688, 450, 810, 1, 13, 'vLeft');
+    this.addRail(594, 688, 450, 810, 1, 13, 'vRight');
+    this.addRail(244, 760, 350, 824, 0.78, 10);
+    this.addRail(656, 760, 550, 824, 0.78, 10);
     this.addRail(386, 880, 444, 923, 0.72, 14);
     this.addRail(514, 880, 456, 923, 0.72, 14);
 
     this.addRail(TABLE.laneLeft, 132, TABLE.laneLeft, 892, 0.82, 10);
     this.addRail(TABLE.laneRight, 118, TABLE.laneRight, 892, 0.82, 10);
-    this.addRail(835, 88, 650, 92, 0.86, 12);
-    this.addRail(650, 92, 572, 162, 0.86, 12);
+    this.createLaunchCurve();
 
     this.addRail(236, 278, 316, 352, 0.9, 12);
     this.addRail(664, 278, 584, 352, 0.9, 12);
@@ -248,8 +273,10 @@ class PinballScene extends Phaser.Scene {
   }
 
   addRail(x1, y1, x2, y2, bounce = 0.8, radius = 10, tag = 'wall') {
-    this.segments.push({ ax: x1, ay: y1, bx: x2, by: y2, bounce, radius, tag });
+    const segment = { ax: x1, ay: y1, bx: x2, by: y2, bounce, radius, tag, lastHit: 0 };
+    this.segments.push(segment);
     const rail = this.add.graphics();
+    segment.flash = rail;
     rail.lineStyle(radius * 2, tag.startsWith('sling') ? 0x20243a : 0x252839, 1);
     rail.beginPath();
     rail.moveTo(x1, y1);
@@ -260,6 +287,24 @@ class PinballScene extends Phaser.Scene {
     rail.moveTo(x1, y1);
     rail.lineTo(x2, y2);
     rail.strokePath();
+  }
+
+  createLaunchCurve() {
+    const points = this.quadraticPoints({ x: 836, y: 88 }, { x: 718, y: 72 }, { x: 636, y: 122 }, 12);
+    const points2 = this.quadraticPoints({ x: 636, y: 122 }, { x: 584, y: 160 }, { x: 724, y: 260 }, 14);
+    this.launchCurve = [...points, ...points2.slice(1)];
+
+    const chute = this.add.graphics().setDepth(6);
+    chute.lineStyle(18, 0x20243a, 1);
+    this.strokePolyline(chute, this.launchCurve);
+    chute.lineStyle(4, 0x9ff6ff, 0.95);
+    this.strokePolyline(chute, this.launchCurve);
+
+    for (let i = 0; i < this.launchCurve.length - 1; i += 1) {
+      const a = this.launchCurve[i];
+      const b = this.launchCurve[i + 1];
+      this.addRail(a.x, a.y, b.x, b.y, 0.92, 11, 'launchCurve');
+    }
   }
 
   createBumpers() {
@@ -273,32 +318,38 @@ class PinballScene extends Phaser.Scene {
       { x: 330, y: 650, radius: 28, label: '2X', color: 0xffd24a },
       { x: 570, y: 650, radius: 28, label: '2X', color: 0xffd24a }
     ].forEach((bumper) => {
-      this.bumpers.push({ ...bumper, hitAt: 0 });
-      this.drawBumper(bumper);
+      const view = this.drawBumper(bumper);
+      this.bumpers.push({ ...bumper, hitAt: 0, view, baseScale: 1 });
     });
   }
 
   drawBumper({ x, y, radius, label, color }) {
-    const g = this.add.graphics().setDepth(4);
+    const group = this.add.container(x, y).setDepth(4);
+    const g = this.add.graphics();
     g.fillStyle(0x2c2862, 1);
-    g.fillCircle(x, y, radius + 7);
+    g.fillCircle(0, 0, radius + 7);
     for (let i = 0; i < 12; i += 1) {
       const angle = (Math.PI * 2 * i) / 12;
       g.lineStyle(5, color, 1);
       g.beginPath();
-      g.moveTo(x + Math.cos(angle) * (radius - 4), y + Math.sin(angle) * (radius - 4));
-      g.lineTo(x + Math.cos(angle) * (radius + 9), y + Math.sin(angle) * (radius + 9));
+      g.moveTo(Math.cos(angle) * (radius - 4), Math.sin(angle) * (radius - 4));
+      g.lineTo(Math.cos(angle) * (radius + 9), Math.sin(angle) * (radius + 9));
       g.strokePath();
     }
     g.fillStyle(color, 1);
-    g.fillCircle(x, y, radius);
+    g.fillCircle(0, 0, radius);
     g.fillStyle(0xffffff, 0.82);
-    g.fillCircle(x, y, radius - 10);
-    this.add.text(x, y, label, {
+    g.fillCircle(0, 0, radius - 10);
+    const text = this.add.text(0, 0, label, {
       fontFamily: 'Arial Black, Impact, sans-serif',
       fontSize: label.length > 3 ? '10px' : '13px',
       color: '#59418a'
-    }).setOrigin(0.5).setDepth(5);
+    }).setOrigin(0.5);
+    const glow = this.add.circle(0, 0, radius + 18, color, 0).setBlendMode(Phaser.BlendModes.ADD);
+    group.add([glow, g, text]);
+    group.glow = glow;
+    group.gear = g;
+    return group;
   }
 
   createRollovers() {
@@ -312,7 +363,7 @@ class PinballScene extends Phaser.Scene {
 
     this.rolloverGraphics = new Map();
     points.forEach(([x, y, label]) => {
-      this.sensors.push({ x, y, radius: 16, label: `rollover:${label}`, lit: false });
+      this.sensors.push({ x, y, radius: 16, label: `rollover:${label}`, lit: false, hitAt: 0 });
       const group = this.add.container(x, y).setDepth(4);
       const ring = this.add.circle(0, 0, 13, 0x4bd47f, 1).setStrokeStyle(3, 0xffffff, 0.55);
       const text = this.add.text(0, 30, label, {
@@ -341,7 +392,7 @@ class PinballScene extends Phaser.Scene {
 
     this.targetViews = new Map();
     targets.forEach(([x, y, angle, label]) => {
-      this.sensors.push({ x, y, radius: 21, label: `target:${label}:${x}:${y}`, lit: false });
+      this.sensors.push({ x, y, radius: 21, label: `target:${label}:${x}:${y}`, lit: false, hitAt: 0 });
       const view = this.add.container(x, y).setDepth(5).setRotation(Phaser.Math.DegToRad(angle));
       const body = this.add.rectangle(0, 0, 20, 48, 0xfff2a6, 1)
         .setStrokeStyle(3, 0x6c5fc3, 1);
@@ -361,6 +412,32 @@ class PinballScene extends Phaser.Scene {
       [610, 735, -35]
     ].forEach(([x, y, angle]) => {
       this.add.image(x, y, 'laneRubber').setAngle(angle).setDepth(4);
+    });
+  }
+
+  createMovingDetails() {
+    const spinner = this.add.container(450, 374).setDepth(5);
+    const blades = this.add.graphics();
+    blades.lineStyle(7, 0x8ff5ff, 0.85);
+    for (let i = 0; i < 3; i += 1) {
+      const angle = (Math.PI * 2 * i) / 3;
+      blades.beginPath();
+      blades.moveTo(Math.cos(angle) * 12, Math.sin(angle) * 12);
+      blades.lineTo(Math.cos(angle) * 48, Math.sin(angle) * 48);
+      blades.strokePath();
+    }
+    spinner.add([this.add.circle(0, 0, 14, 0xfff0a3, 1), blades]);
+    this.movers.push({ type: 'spin', node: spinner, speed: 0.45 });
+
+    [
+      { x: 298, y: 598, dx: 32, color: 0x8ff5ff },
+      { x: 602, y: 598, dx: -32, color: 0xff9ed1 },
+      { x: 450, y: 690, dx: 42, color: 0xfff0a3 }
+    ].forEach((data, index) => {
+      const orb = this.add.circle(data.x, data.y, 7, data.color, 1)
+        .setStrokeStyle(2, 0xffffff, 0.75)
+        .setDepth(6);
+      this.movers.push({ type: 'bob', node: orb, baseX: data.x, baseY: data.y, dx: data.dx, phase: index * 1.8 });
     });
   }
 
@@ -494,6 +571,7 @@ class PinballScene extends Phaser.Scene {
     this.updateFlipper(this.flippers.left, leftActive, dt);
     this.updateFlipper(this.flippers.right, rightActive, dt);
     this.updatePlunger(dt);
+    this.updateMovingDetails(time / 1000);
 
     if (Phaser.Input.Keyboard.JustDown(this.keys.r)) this.restartGame();
 
@@ -507,6 +585,22 @@ class PinballScene extends Phaser.Scene {
     this.ballSprite.rotation += (this.ball.vx * dt) / 20;
 
     if (this.ball.y > HEIGHT + 30) this.drainBall();
+  }
+
+  updateMovingDetails(time) {
+    this.movers.forEach((mover) => {
+      if (mover.type === 'spin') {
+        mover.node.rotation += mover.speed * 0.016;
+      }
+      if (mover.type === 'bob') {
+        mover.node.x = mover.baseX + Math.sin(time * 0.9 + mover.phase) * mover.dx;
+        mover.node.y = mover.baseY + Math.cos(time * 0.7 + mover.phase) * 8;
+      }
+    });
+
+    this.bumpers.forEach((bumper, index) => {
+      bumper.view.gear.rotation += 0.006 + index * 0.0007;
+    });
   }
 
   updateFlipper(flipper, active, dt) {
@@ -555,11 +649,13 @@ class PinballScene extends Phaser.Scene {
     this.ball.x += this.ball.vx * dt;
     this.ball.y += this.ball.vy * dt;
 
-    if (this.ball.x > TABLE.laneLeft - 6 && this.ball.y < 560 && this.ball.vy < -80) {
-      this.ball.x = 724;
-      this.ball.y = 260;
-      this.ball.vx = -620;
-      this.ball.vy = -20;
+    if (this.ball.x > TABLE.laneLeft - 6 && this.ball.y < 720 && this.ball.vy < -80) {
+      const target = this.pointOnLaunchCurve(clamp((720 - this.ball.y) / 635, 0.45, 1));
+      this.ball.x = target.x;
+      this.ball.y = target.y;
+      this.ball.vx = -760;
+      this.ball.vy = 18;
+      this.flashAt(target.x, target.y, 56, 0x8ff5ff);
     }
 
     this.segments.forEach((segment) => this.collideSegment(segment));
@@ -594,6 +690,11 @@ class PinballScene extends Phaser.Scene {
     this.ball.x += nx * penetration;
     this.ball.y += ny * penetration;
     this.reflectVelocity(nx, ny, segment.bounce);
+    if (this.time.now - segment.lastHit > 80) {
+      segment.lastHit = this.time.now;
+      this.flashRail(segment);
+      this.flashAt(hit.x, hit.y, 34, segment.tag === 'launchCurve' ? 0x8ff5ff : 0xfff0a3);
+    }
 
     if (segment.tag === 'slingLeft') {
       this.ball.vx += 170;
@@ -624,6 +725,7 @@ class PinballScene extends Phaser.Scene {
     this.ball.x += nx * (minDistance - distance);
     this.ball.y += ny * (minDistance - distance);
     this.reflectVelocity(nx, ny, 0.9);
+    this.flashObject(flipper.sprite, 0xfff0a3);
 
     if (flipper.kickTimer > 0 || flipper.wasActive) {
       const side = flipper.side === 'left' ? 1 : -1;
@@ -653,6 +755,7 @@ class PinballScene extends Phaser.Scene {
       this.addScore(bumper.label === 'STAR' ? 250 : Number.parseInt(bumper.label, 10) * 10);
       this.synth.bumper();
       this.flashAt(bumper.x, bumper.y, bumper.radius + 35, bumper.color);
+      this.flashObject(bumper.view, bumper.color);
     }
   }
 
@@ -672,13 +775,24 @@ class PinballScene extends Phaser.Scene {
     this.sensors.forEach((sensor) => {
       const distance = Phaser.Math.Distance.Between(this.ball.x, this.ball.y, sensor.x, sensor.y);
       if (distance > this.ball.radius + sensor.radius) return;
+      if (this.time.now - sensor.hitAt < 170) return;
+      sensor.hitAt = this.time.now;
 
-      if (sensor.label.startsWith('rollover:') && !sensor.lit) {
-        sensor.lit = true;
+      if (sensor.label.startsWith('rollover:')) {
         const label = sensor.label.replace('rollover:', '');
-        this.rolloversLit.add(label);
+        this.flashObject(this.rolloverGraphics.get(label), 0xffef7a);
+        this.flashAt(sensor.x, sensor.y, 30, 0xffef7a);
+        if (!sensor.lit) {
+          sensor.lit = true;
+          this.rolloversLit.add(label);
+          this.addScore(800);
+        } else {
+          this.addScore(80);
+        }
         this.rolloverGraphics.get(label)?.setFillStyle(0xffef7a, 1);
-        this.addScore(800);
+        this.time.delayedCall(140, () => {
+          this.rolloverGraphics.get(label)?.setFillStyle(sensor.lit ? 0x78f0a0 : 0x4bd47f, 1);
+        });
         if (this.rolloversLit.size === 5) {
           this.multiplier = Math.min(5, this.multiplier + 1);
           this.addScore(5000);
@@ -686,12 +800,22 @@ class PinballScene extends Phaser.Scene {
         }
       }
 
-      if (sensor.label.startsWith('target:') && !sensor.lit) {
-        sensor.lit = true;
-        this.targetsLit.add(sensor.label);
-        this.targetViews.get(sensor.label)?.setFillStyle(0x78f0a0, 1);
-        this.addScore(1200);
-        this.synth.award();
+      if (sensor.label.startsWith('target:')) {
+        const target = this.targetViews.get(sensor.label);
+        target?.setFillStyle(0x78f0a0, 1);
+        this.flashObject(target, 0x78f0a0);
+        this.flashAt(sensor.x, sensor.y, 32, 0x78f0a0);
+        this.time.delayedCall(120, () => {
+          target?.setFillStyle(0xfff2a6, 1);
+        });
+        if (!sensor.lit) {
+          sensor.lit = true;
+          this.targetsLit.add(sensor.label);
+          this.addScore(1200);
+          this.synth.award();
+        } else {
+          this.addScore(160);
+        }
       }
     });
   }
@@ -789,6 +913,73 @@ class PinballScene extends Phaser.Scene {
       ease: 'Quad.Out',
       onComplete: () => flash.destroy()
     });
+  }
+
+  flashObject(target, color = 0xffffff) {
+    if (!target) return;
+    if (target.glow) {
+      target.glow.setFillStyle(color, 0.65);
+      this.tweens.add({
+        targets: target.glow,
+        alpha: 0,
+        duration: 180,
+        yoyo: true,
+        repeat: 1,
+        onComplete: () => target.glow.setAlpha(0)
+      });
+    }
+    this.tweens.add({
+      targets: target,
+      scaleX: 1.12,
+      scaleY: 1.12,
+      duration: 48,
+      yoyo: true,
+      repeat: 1,
+      ease: 'Quad.Out'
+    });
+  }
+
+  flashRail(segment) {
+    const glow = this.add.graphics().setDepth(13);
+    glow.lineStyle(segment.radius * 2 + 8, 0xfff0a3, 0.72);
+    glow.beginPath();
+    glow.moveTo(segment.ax, segment.ay);
+    glow.lineTo(segment.bx, segment.by);
+    glow.strokePath();
+    this.tweens.add({
+      targets: glow,
+      alpha: 0,
+      duration: 130,
+      yoyo: true,
+      repeat: 1,
+      onComplete: () => glow.destroy()
+    });
+  }
+
+  pointOnLaunchCurve(t) {
+    if (!this.launchCurve.length) return { x: 724, y: 260 };
+    const index = Math.floor(t * (this.launchCurve.length - 1));
+    return this.launchCurve[index];
+  }
+
+  quadraticPoints(start, control, end, steps) {
+    const points = [];
+    for (let i = 0; i <= steps; i += 1) {
+      const t = i / steps;
+      const inv = 1 - t;
+      points.push({
+        x: inv * inv * start.x + 2 * inv * t * control.x + t * t * end.x,
+        y: inv * inv * start.y + 2 * inv * t * control.y + t * t * end.y
+      });
+    }
+    return points;
+  }
+
+  strokePolyline(graphics, points) {
+    graphics.beginPath();
+    graphics.moveTo(points[0].x, points[0].y);
+    points.slice(1).forEach((point) => graphics.lineTo(point.x, point.y));
+    graphics.strokePath();
   }
 
   strokeArc(graphics, x, y, radius, startDeg, endDeg, steps) {
